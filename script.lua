@@ -10,7 +10,7 @@ local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
 local DEFAULT_WALKSPEED = 16
-local FARM_WALKSPEED = 200
+local FARM_WALKSPEED = 135
 local DEFAULT_GRAVITY = Workspace.Gravity
 
 local function onCharacterAdded(char)
@@ -298,7 +298,7 @@ local farmLoop = task.spawn(function()
 						local startTime = tick()
 						while not finished and tick() - startTime < 2 do
 							-- Check if collectible was collected/removed during movement
-							task.wait(0.1)
+							task.wait(0.05)
 							if not collectibleExists(currentTarget) then
 								break
 							end
@@ -363,7 +363,7 @@ local farmLoop = task.spawn(function()
 				-- Set gravity to 0 while farming enemies
 				Workspace.Gravity = 0
 
-				local delayTime = #monsterList < 8 and 0.2 or 0.045
+				local delayTime = #monsterList < 8 and 0.2 or 0.1
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
