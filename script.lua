@@ -3,6 +3,7 @@
 ------------------------------------------------
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -12,6 +13,10 @@ local hrp = character:WaitForChild("HumanoidRootPart")
 local DEFAULT_WALKSPEED = 16
 local FARM_WALKSPEED = 135
 local DEFAULT_GRAVITY = Workspace.Gravity
+local TWEEN_SPEED = 45
+local MAX_TARGETS = 7
+
+local spawnLocation = Workspace:WaitForChild("ClassicMinigame"):WaitForChild("ClassicSpawnLocation")
 
 local function onCharacterAdded(char)
 	character = char
@@ -164,12 +169,25 @@ end
 
 local function refreshMonsters()
 	monsterList = {}
-	if not monstersFolder then return end
+	if not monstersFolder or not spawnLocation then return end
 	
+	local tempList = {}
 	for _, m in ipairs(monstersFolder:GetChildren()) do
 		if m:IsA("Model") and isValidMonster(m) then
-			table.insert(monsterList, m)
+			local root = getRoot(m)
+			if root then
+				local distance = (root.Position - spawnLocation.Position).Magnitude
+				table.insert(tempList, {monster = m, distance = distance})
+			end
 		end
+	end
+	
+	-- Sort by distance to spawn location
+	table.sort(tempList, function(a, b) return a.distance < b.distance end)
+	
+	-- Take only the closest 7
+	for i = 1, math.min(MAX_TARGETS, #tempList) do
+		table.insert(monsterList, tempList[i].monster)
 	end
 end
 
@@ -356,25 +374,36 @@ local farmLoop = task.spawn(function()
 					end
 				end
 
-			-- ENEMIES EXIST → TELEPORT FARM
+			-- ENEMIES EXIST → TWEEN FARM
 			else
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
 				
 				-- Set gravity to 0 while farming enemies
 				Workspace.Gravity = 0
 
-				local delayTime = #monsterList < 8 and 0.2 or 0.1
-
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
 					if isValidMonster(monster) then
 						local root = getRoot(monster)
 						if root and root.Parent then
-							local pos = root.Position + Vector3.new(0, teleportHeight, 0)
-							hrp.CFrame = CFrame.lookAt(pos, root.Position)
+							local targetPos = root.Position + Vector3.new(0, teleportHeight, 0)
+							local distance = (hrp.Position - targetPos).Magnitude
+							local tweenTime = distance / TWEEN_SPEED
+							
+							local tweenInfo = TweenInfo.new(
+								tweenTime,
+								Enum.EasingStyle.Linear,
+								Enum.EasingDirection.InOut
+							)
+							
+							local goal = {CFrame = CFrame.lookAt(targetPos, root.Position)}
+							local tween = TweenService:Create(hrp, tweenInfo, goal)
+							
 							hrp.AssemblyLinearVelocity = Vector3.zero
 							hrp.AssemblyAngularVelocity = Vector3.zero
-							task.wait(delayTime)
+							
+							tween:Play()
+							tween.Completed:Wait()
 						end
 					end
 				end
