@@ -13,6 +13,19 @@ local DEFAULT_WALKSPEED = 16
 local FARM_WALKSPEED = 200
 local DEFAULT_GRAVITY = Workspace.Gravity
 
+------------------------------------------------
+-- STATE (DECLARE EARLY)
+------------------------------------------------
+local autofarmEnabled = false
+local collectiblesEnabled = true
+
+local monsterList = {}
+local teleportHeight = 4
+
+local COLLECTIBLE_RANGE = 200
+local COLLECTIBLE_HEIGHT = 0.5
+local TARGET_COLOR = Color3.fromRGB(110, 244, 240)
+
 local function onCharacterAdded(char)
 	character = char
 	humanoid = char:WaitForChild("Humanoid")
@@ -47,19 +60,6 @@ end
 if not monstersFolder or not collectiblesFolder then
 	error("Required folders not found - script cannot run")
 end
-
-------------------------------------------------
--- STATE
-------------------------------------------------
-local autofarmEnabled = false
-local collectiblesEnabled = true
-
-local monsterList = {}
-local teleportHeight = 4
-
-local COLLECTIBLE_RANGE = 200
-local COLLECTIBLE_HEIGHT = 0.5
-local TARGET_COLOR = Color3.fromRGB(110, 244, 240)
 
 ------------------------------------------------
 -- GUI
@@ -211,11 +211,72 @@ local function getCollectiblePosition(obj)
 	end
 end
 
+local function buildCollectiblePath()
+	local path = {}
+	local visited = {}
+	
+	if not hrp or not hrp.Parent then return path end
+	
+	-- Find closest collectible to player as starting point (within range only)
+	local currentPos = hrp.Position
+	local currentTarget = nil
+	local closestDist = math.huge
+	
+	for _, c in ipairs(collectiblesFolder:GetChildren()) do
+		if collectibleExists(c) and isCorrectColor(c) then
+			local pos = getCollectiblePosition(c)
+			if pos then
+				local dist = (pos - currentPos).Magnitude
+				if dist < closestDist and dist <= COLLECTIBLE_RANGE then
+					closestDist = dist
+					currentTarget = c
+				end
+			end
+		end
+		task.wait(0.03)
+	end
+	
+	if not currentTarget then return path end
+	
+	-- Build path by chaining closest collectibles
+	while currentTarget do
+		table.insert(path, currentTarget)
+		visited[currentTarget] = true
+		
+		local targetPos = getCollectiblePosition(currentTarget)
+		if not targetPos then break end
+		
+		-- Find next closest collectible to current target
+		local nextTarget = nil
+		closestDist = math.huge
+		
+		for _, c in ipairs(collectiblesFolder:GetChildren()) do
+			if collectibleExists(c) and isCorrectColor(c) and not visited[c] then
+				local pos = getCollectiblePosition(c)
+				if pos then
+					local dist = (pos - targetPos).Magnitude
+					if dist < closestDist then
+						closestDist = dist
+						nextTarget = c
+					end
+				end
+			end
+			task.wait(0.03)
+		end
+		
+		currentTarget = nextTarget
+	end
+	
+	return path
+end
+
 ------------------------------------------------
 -- AUTOFARM LOOP
 ------------------------------------------------
 local farmLoop = task.spawn(function()
 	while true do
+		task.wait(0.1)
+		
 		-- Safety check for character
 		if not character or not character.Parent or not hrp or not hrp.Parent or not humanoid or not humanoid.Parent then
 			task.wait(1)
@@ -233,68 +294,10 @@ local farmLoop = task.spawn(function()
 				local allCollectibles = collectiblesFolder:GetChildren()
 				if #allCollectibles == 0 then
 					-- Wait for new collectible to be added
-					local newCollectible = collectiblesFolder.ChildAdded:Wait()
+					collectiblesFolder.ChildAdded:Wait()
 					task.wait(0.03)
 				end
 
-				-- Build complete path of collectibles in order
-				local function buildCollectiblePath()
-					local path = {}
-					local visited = {}
-					
-					-- Find closest collectible to player as starting point (within range only)
-					local currentPos = hrp.Position
-					local currentTarget = nil
-					local closestDist = math.huge
-					
-					for _, c in ipairs(collectiblesFolder:GetChildren()) do
-						if collectibleExists(c) and isCorrectColor(c) then
-							local pos = getCollectiblePosition(c)
-							if pos then
-								local dist = (pos - currentPos).Magnitude
-								if dist < closestDist and dist <= COLLECTIBLE_RANGE then
-									closestDist = dist
-									currentTarget = c
-								end
-							end
-						end
-						task.wait(0.03)
-					end
-					
-					if not currentTarget then return path end
-					
-					-- Build path by chaining closest collectibles
-					while currentTarget do
-						table.insert(path, currentTarget)
-						visited[currentTarget] = true
-						
-						local targetPos = getCollectiblePosition(currentTarget)
-						if not targetPos then break end
-						
-						-- Find next closest collectible to current target
-						local nextTarget = nil
-						closestDist = math.huge
-						
-						for _, c in ipairs(collectiblesFolder:GetChildren()) do
-							if collectibleExists(c) and isCorrectColor(c) and not visited[c] then
-								local pos = getCollectiblePosition(c)
-								if pos then
-									local dist = (pos - targetPos).Magnitude
-									if dist < closestDist then
-										closestDist = dist
-										nextTarget = c
-									end
-								end
-							end
-							task.wait(0.03)
-						end
-						
-						currentTarget = nextTarget
-					end
-					
-					return path
-				end
-				
 				-- Build the path
 				local path = buildCollectiblePath()
 				
@@ -317,7 +320,6 @@ local farmLoop = task.spawn(function()
 						-- Check if we're still within range of player's original position
 						if (targetPos - hrp.Position).Magnitude > COLLECTIBLE_RANGE then
 							-- Rebuild path from current position
-							path = buildCollectiblePath()
 							break
 						end
 						
@@ -365,7 +367,6 @@ local farmLoop = task.spawn(function()
 				Workspace.Gravity = DEFAULT_GRAVITY
 			end
 		end
-		task.wait(0.1)
 	end
 end)
 
@@ -396,4 +397,3 @@ gui.Destroying:Connect(function()
 	if farmLoop then
 		task.cancel(farmLoop)
 	end
-end)
