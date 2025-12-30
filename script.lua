@@ -57,7 +57,7 @@ local collectiblesEnabled = true
 local monsterList = {}
 local teleportHeight = 4
 
-local COLLECTIBLE_RANGE = 200
+local COLLECTIBLE_RANGE = 600
 local COLLECTIBLE_HEIGHT = 0.5
 local TARGET_COLOR = Color3.fromRGB(110, 244, 240)
 
