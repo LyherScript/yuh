@@ -390,6 +390,9 @@ local farmLoop = task.spawn(function()
 							local distance = (hrp.Position - targetPos).Magnitude
 							local tweenTime = distance / TWEEN_SPEED
 							
+							-- Anchor the HumanoidRootPart to allow tweening
+							hrp.Anchored = true
+							
 							local tweenInfo = TweenInfo.new(
 								tweenTime,
 								Enum.EasingStyle.Linear,
@@ -404,6 +407,9 @@ local farmLoop = task.spawn(function()
 							
 							tween:Play()
 							tween.Completed:Wait()
+							
+							-- Unanchor after tween completes
+							hrp.Anchored = false
 						end
 					end
 				end
@@ -422,6 +428,7 @@ script.Destroying:Connect(function()
 	autofarmEnabled = false
 	humanoid.WalkSpeed = DEFAULT_WALKSPEED
 	Workspace.Gravity = DEFAULT_GRAVITY
+	hrp.Anchored = false
 	
 	if farmLoop then
 		task.cancel(farmLoop)
@@ -437,6 +444,9 @@ gui.Destroying:Connect(function()
 	autofarmEnabled = false
 	if humanoid and humanoid.Parent then
 		humanoid.WalkSpeed = DEFAULT_WALKSPEED
+	end
+	if hrp and hrp.Parent then
+		hrp.Anchored = false
 	end
 	Workspace.Gravity = DEFAULT_GRAVITY
 	
