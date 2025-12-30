@@ -9,7 +9,7 @@ local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
 local DEFAULT_WALKSPEED = 16
-local FARM_WALKSPEED = 100
+local FARM_WALKSPEED = 200
 
 local function onCharacterAdded(char)
 	character = char
