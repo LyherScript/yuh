@@ -233,54 +233,120 @@ local farmLoop = task.spawn(function()
 		if autofarmEnabled then
 			refreshMonsters()
 
-			-- NO ENEMIES → WALK TO COLLECTIBLES (closest first)
+			-- NO ENEMIES → WALK TO COLLECTIBLES (chain closest)
 			if #monsterList == 0 and collectiblesEnabled then
 				humanoid.WalkSpeed = FARM_WALKSPEED
 
-				local collectibles = getNearbyCollectibles()
-				for _, collectible in ipairs(collectibles) do
-					if not autofarmEnabled then break end
-					
+				-- Wait for a collectible to appear if none exist
+				local allCollectibles = collectiblesFolder:GetChildren()
+				if #allCollectibles == 0 then
+					-- Wait for new collectible to be added
+					local newCollectible = collectiblesFolder.ChildAdded:Wait()
+					task.wait(0.1) -- Brief delay to let it fully load
+				end
+
+				-- Find closest collectible to player as starting point
+				local currentTarget = nil
+				local closestDist = math.huge
+				
+				for _, c in ipairs(collectiblesFolder:GetChildren()) do
+					if collectibleExists(c) then
+						local pos = getCollectiblePosition(c)
+						if pos then
+							local dist = (pos - hrp.Position).Magnitude
+							if dist < closestDist then
+								closestDist = dist
+								currentTarget = c
+							end
+						end
+					end
+				end
+
+				-- Chain through collectibles, always picking the closest to current target
+				local visitedCollectibles = {}
+				
+				while currentTarget and autofarmEnabled do
 					-- Double-check monster list before moving
 					refreshMonsters()
 					if #monsterList > 0 then break end
 
-					-- Verify collectible still exists before moving
-					if collectibleExists(collectible) then
-						local pos = getCollectiblePosition(collectible)
-						if pos and humanoid and humanoid.Parent then
-							humanoid:MoveTo(pos)
-							
-							-- Wait for move to finish with timeout
-							local moveConnection
-							local finished = false
-							
-							moveConnection = humanoid.MoveToFinished:Connect(function()
-								finished = true
-							end)
-							
-							-- Wait up to 2 seconds for move to complete
-							local startTime = tick()
-							while not finished and tick() - startTime < 2 do
-								task.wait(0.1)
-								-- Check if collectible was collected/removed during movement
-								if not collectibleExists(collectible) then
-									break
+					-- Verify target still exists
+					if not collectibleExists(currentTarget) then
+						-- Find a new target that hasn't been visited
+						currentTarget = nil
+						closestDist = math.huge
+						
+						for _, c in ipairs(collectiblesFolder:GetChildren()) do
+							if collectibleExists(c) and not visitedCollectibles[c] then
+								local pos = getCollectiblePosition(c)
+								if pos then
+									local dist = (pos - hrp.Position).Magnitude
+									if dist < closestDist then
+										closestDist = dist
+										currentTarget = c
+									end
 								end
 							end
-							
-							if moveConnection then
-								moveConnection:Disconnect()
+						end
+						
+						if not currentTarget then break end
+					end
+
+					local targetPos = getCollectiblePosition(currentTarget)
+					if targetPos and humanoid and humanoid.Parent then
+						humanoid:MoveTo(targetPos)
+						
+						-- Wait for move to finish with timeout
+						local moveConnection
+						local finished = false
+						
+						moveConnection = humanoid.MoveToFinished:Connect(function()
+							finished = true
+						end)
+						
+						-- Wait up to 2 seconds for move to complete
+						local startTime = tick()
+						while not finished and tick() - startTime < 2 do
+							task.wait(0.1)
+							-- Check if collectible was collected/removed during movement
+							if not collectibleExists(currentTarget) then
+								break
+							end
+						end
+						
+						if moveConnection then
+							moveConnection:Disconnect()
+						end
+					end
+
+					-- Mark as visited
+					visitedCollectibles[currentTarget] = true
+
+					-- Find next closest collectible to CURRENT TARGET (not player)
+					local nextTarget = nil
+					closestDist = math.huge
+					
+					for _, c in ipairs(collectiblesFolder:GetChildren()) do
+						if collectibleExists(c) and not visitedCollectibles[c] then
+							local pos = getCollectiblePosition(c)
+							if pos and targetPos then
+								local dist = (pos - targetPos).Magnitude
+								if dist < closestDist then
+									closestDist = dist
+									nextTarget = c
+								end
 							end
 						end
 					end
+
+					currentTarget = nextTarget
 				end
 
 			-- ENEMIES EXIST → TELEPORT FARM
 			else
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
 
-				local delayTime = #monsterList < 8 and 0.2 or 0.05
+				local delayTime = #monsterList < 8 and 0.2 or 0.125
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
