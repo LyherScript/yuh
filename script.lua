@@ -363,7 +363,7 @@ local farmLoop = task.spawn(function()
 				-- Set gravity to 0 while farming enemies
 				Workspace.Gravity = 0
 
-				local delayTime = #monsterList < 8 and 0.4 or 0.25
+				local delayTime = #monsterList < 8 and 0.15 or 0.05
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
