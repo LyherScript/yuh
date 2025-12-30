@@ -163,26 +163,7 @@ local function getNearbyCollectibles()
 			table.insert(list, c)
 		end
 	end
-
-	-- Sort by distance to HRP
-	table.sort(list, function(a,b)
-		local pa = getCollectiblePosition(a)
-		local pb = getCollectiblePosition(b)
-		if pa and pb then
-			return (pa - hrp.Position).Magnitude < (pb - hrp.Position).Magnitude
-		end
-		return false
-	end)
-
 	return list
-end
-
-local function teleportToCollectible(obj)
-	if not collectiblesEnabled then return end
-	local pos = getCollectiblePosition(obj)
-	if pos then
-		hrp.CFrame = CFrame.new(pos + Vector3.new(0, COLLECTIBLE_HEIGHT, 0))
-	end
 end
 
 ------------------------------------------------
@@ -193,13 +174,14 @@ task.spawn(function()
 		if autofarmEnabled then
 			refreshMonsters()
 
-			-- NO ENEMIES → WALK TO COLLECTIBLES (closest first)
+			------------------------------------------------
+			-- NO ENEMIES → WALK TO COLLECTIBLES
+			------------------------------------------------
 			if #monsterList == 0 and collectiblesEnabled then
 				hrp.Anchored = false
 				humanoid.WalkSpeed = FARM_WALKSPEED
 
-				local collectibles = getNearbyCollectibles()
-				for _, collectible in ipairs(collectibles) do
+				for _, collectible in ipairs(getNearbyCollectibles()) do
 					if not autofarmEnabled then break end
 					refreshMonsters()
 					if #monsterList > 0 then break end
@@ -211,12 +193,14 @@ task.spawn(function()
 					end
 				end
 
+			------------------------------------------------
 			-- ENEMIES EXIST → TELEPORT FARM
+			------------------------------------------------
 			else
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
 				hrp.Anchored = true
 
-				local delayTime = #monsterList < 8 and 0.3 or 0.25
+				local delayTime = #monsterList < 8 and 0.2 or 0.05
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
@@ -227,15 +211,6 @@ task.spawn(function()
 							hrp.CFrame = CFrame.lookAt(pos, root.Position)
 							enemyCounter += 1
 							task.wait(delayTime)
-
-							-- Collectibles every 3 enemies
-							if collectiblesEnabled and enemyCounter % 3 == 0 then
-								local nearby = getNearbyCollectibles()
-								if #nearby > 0 then
-									teleportToCollectible(nearby[1]) -- closest first
-									task.wait(0.1)
-								end
-							end
 						end
 					end
 				end
