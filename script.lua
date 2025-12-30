@@ -57,7 +57,7 @@ local collectiblesEnabled = true
 local monsterList = {}
 local teleportHeight = 4
 
-local COLLECTIBLE_RANGE = 300
+local COLLECTIBLE_RANGE = 150
 local COLLECTIBLE_HEIGHT = 0.5
 
 ------------------------------------------------
@@ -213,7 +213,6 @@ local farmLoop = task.spawn(function()
 				if #allCollectibles == 0 then
 					-- Wait for new collectible to be added
 					local newCollectible = collectiblesFolder.ChildAdded:Wait()
-					task.wait(0.1)
 				end
 
 				-- Find closest collectible to player as starting point
@@ -278,7 +277,7 @@ local farmLoop = task.spawn(function()
 						-- Wait up to 2 seconds for move to complete
 						local startTime = tick()
 						while not finished and tick() - startTime < 2 do
-							task.wait(0.1)
+							task.wait(0.04)
 							-- Check if collectible was collected/removed during movement
 							if not collectibleExists(currentTarget) then
 								break
@@ -320,7 +319,7 @@ local farmLoop = task.spawn(function()
 				-- Set gravity to 0 while farming enemies
 				Workspace.Gravity = 0
 
-				local delayTime = #monsterList < 8 and 0.2 or 0.05
+				local delayTime = #monsterList < 8 and 0.1 or 0.05
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
