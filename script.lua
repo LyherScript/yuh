@@ -7,11 +7,13 @@ local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
 
-player.CharacterAdded:Connect(function(char)
+local function onCharacterAdded(char)
 	character = char
 	hrp = char:WaitForChild("HumanoidRootPart")
-	hrp.Anchored = false -- safety
-end)
+	hrp.Anchored = false -- safety reset
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
 
 ------------------------------------------------
 -- FOLDERS
@@ -20,14 +22,17 @@ local monstersFolder = workspace:WaitForChild("Monsters")
 local collectiblesFolder = workspace:WaitForChild("Collectibles")
 
 ------------------------------------------------
--- STATE
+-- CONSTANTS & STATE
 ------------------------------------------------
 local autofarmEnabled = false
 local collectiblesEnabled = true
+
 local monsterList = {}
 local teleportHeight = 4
 local enemyCounter = 0
+
 local COLLECTIBLE_RANGE = 400
+local COLLECTIBLE_HEIGHT = 0.5
 
 ------------------------------------------------
 -- GUI
@@ -95,11 +100,17 @@ toggleButton.MouseButton1Click:Connect(function()
 	if autofarmEnabled then
 		toggleButton.Text = "Autofarm: ON"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(0,170,0)
-		if hrp then hrp.Anchored = true end
+
+		if hrp then
+			hrp.Anchored = true -- ✅ FORCE ANCHOR
+		end
 	else
 		toggleButton.Text = "Autofarm: OFF"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(170,0,0)
-		if hrp then hrp.Anchored = false end
+
+		if hrp then
+			hrp.Anchored = false -- ✅ RELEASE
+		end
 	end
 end)
 
@@ -141,7 +152,7 @@ monstersFolder.ChildRemoved:Connect(refreshMonsters)
 refreshMonsters()
 
 ------------------------------------------------
--- COLLECTIBLES (OPTIONAL)
+-- COLLECTIBLES
 ------------------------------------------------
 local function getCollectiblePosition(obj)
 	if obj:IsA("BasePart") then
@@ -169,24 +180,25 @@ local function teleportToCollectible(obj)
 	if not collectiblesEnabled then return end
 	local pos = getCollectiblePosition(obj)
 	if pos then
-		hrp.CFrame = CFrame.new(pos + Vector3.new(0, teleportHeight, 0))
+		hrp.CFrame = CFrame.new(pos + Vector3.new(0, COLLECTIBLE_HEIGHT, 0))
 	end
 end
 
 ------------------------------------------------
--- AUTOFARM LOOP
+-- AUTOFARM LOOP (ANCHOR ENFORCED)
 ------------------------------------------------
 task.spawn(function()
 	while true do
 		if autofarmEnabled and hrp then
+			hrp.Anchored = true -- ✅ KEEP ANCHORED AT ALL TIMES
+
 			refreshMonsters()
 			local enemyCount = #monsterList
 
-			-- NO ENEMIES → COLLECTIBLES
 			if enemyCount == 0 then
 				if collectiblesEnabled then
 					for _, collectible in ipairs(getNearbyCollectibles()) do
-						if not autofarmEnabled or not collectiblesEnabled then break end
+						if not autofarmEnabled then break end
 						teleportToCollectible(collectible)
 						task.wait(0.1)
 					end
