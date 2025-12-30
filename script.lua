@@ -10,6 +10,7 @@ local hrp = character:WaitForChild("HumanoidRootPart")
 player.CharacterAdded:Connect(function(char)
 	character = char
 	hrp = char:WaitForChild("HumanoidRootPart")
+	hrp.Anchored = false -- safety
 end)
 
 ------------------------------------------------
@@ -90,14 +91,23 @@ end)
 
 toggleButton.MouseButton1Click:Connect(function()
 	autofarmEnabled = not autofarmEnabled
-	toggleButton.Text = autofarmEnabled and "Autofarm: ON" or "Autofarm: OFF"
-	toggleButton.BackgroundColor3 = autofarmEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(170,0,0)
+
+	if autofarmEnabled then
+		toggleButton.Text = "Autofarm: ON"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(0,170,0)
+		if hrp then hrp.Anchored = true end
+	else
+		toggleButton.Text = "Autofarm: OFF"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(170,0,0)
+		if hrp then hrp.Anchored = false end
+	end
 end)
 
 collectibleButton.MouseButton1Click:Connect(function()
 	collectiblesEnabled = not collectiblesEnabled
 	collectibleButton.Text = collectiblesEnabled and "Collectibles: ON" or "Collectibles: OFF"
-	collectibleButton.BackgroundColor3 = collectiblesEnabled and Color3.fromRGB(0,120,170) or Color3.fromRGB(100,100,100)
+	collectibleButton.BackgroundColor3 =
+		collectiblesEnabled and Color3.fromRGB(0,120,170) or Color3.fromRGB(100,100,100)
 end)
 
 closeButton.MouseButton1Click:Connect(function()
@@ -143,9 +153,7 @@ local function getCollectiblePosition(obj)
 end
 
 local function getNearbyCollectibles()
-	if not collectiblesEnabled or not hrp then
-		return {}
-	end
+	if not collectiblesEnabled or not hrp then return {} end
 
 	local nearby = {}
 	for _, collectible in ipairs(collectiblesFolder:GetChildren()) do
@@ -174,7 +182,7 @@ task.spawn(function()
 			refreshMonsters()
 			local enemyCount = #monsterList
 
-			-- NO ENEMIES → COLLECTIBLES (IF ENABLED)
+			-- NO ENEMIES → COLLECTIBLES
 			if enemyCount == 0 then
 				if collectiblesEnabled then
 					for _, collectible in ipairs(getNearbyCollectibles()) do
@@ -196,7 +204,6 @@ task.spawn(function()
 							enemyCounter += 1
 							task.wait(delayTime)
 
-							-- EVERY 3 ENEMIES → COLLECTIBLE (IF ENABLED)
 							if collectiblesEnabled and enemyCounter % 3 == 0 then
 								local nearby = getNearbyCollectibles()
 								if #nearby > 0 then
