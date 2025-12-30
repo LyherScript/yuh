@@ -14,7 +14,7 @@ local FARM_WALKSPEED = 200
 local DEFAULT_GRAVITY = Workspace.Gravity
 
 ------------------------------------------------
--- STATE (DECLARE EARLY)
+-- STATE
 ------------------------------------------------
 local autofarmEnabled = false
 local collectiblesEnabled = true
@@ -211,13 +211,14 @@ local function getCollectiblePosition(obj)
 	end
 end
 
+-- Build a smooth path through all collectibles
 local function buildCollectiblePath()
 	local path = {}
 	local visited = {}
 	
 	if not hrp or not hrp.Parent then return path end
 	
-	-- Find closest collectible to player as starting point (within range only)
+	-- Find closest collectible to player
 	local currentPos = hrp.Position
 	local currentTarget = nil
 	local closestDist = math.huge
@@ -238,7 +239,7 @@ local function buildCollectiblePath()
 	
 	if not currentTarget then return path end
 	
-	-- Build path by chaining closest collectibles
+	-- Build path by always choosing closest unvisited collectible
 	while currentTarget do
 		table.insert(path, currentTarget)
 		visited[currentTarget] = true
@@ -246,7 +247,7 @@ local function buildCollectiblePath()
 		local targetPos = getCollectiblePosition(currentTarget)
 		if not targetPos then break end
 		
-		-- Find next closest collectible to current target
+		-- Find next closest collectible to current one
 		local nextTarget = nil
 		closestDist = math.huge
 		
@@ -275,8 +276,6 @@ end
 ------------------------------------------------
 local farmLoop = task.spawn(function()
 	while true do
-		task.wait(0.1)
-		
 		-- Safety check for character
 		if not character or not character.Parent or not hrp or not hrp.Parent or not humanoid or not humanoid.Parent then
 			task.wait(1)
@@ -286,22 +285,21 @@ local farmLoop = task.spawn(function()
 		if autofarmEnabled then
 			refreshMonsters()
 
-			-- NO ENEMIES → WALK TO COLLECTIBLES (chain closest)
+			-- NO ENEMIES → WALK TO COLLECTIBLES
 			if #monsterList == 0 and collectiblesEnabled then
 				humanoid.WalkSpeed = FARM_WALKSPEED
 
 				-- Wait for a collectible to appear if none exist
 				local allCollectibles = collectiblesFolder:GetChildren()
 				if #allCollectibles == 0 then
-					-- Wait for new collectible to be added
 					collectiblesFolder.ChildAdded:Wait()
 					task.wait(0.03)
 				end
 
-				-- Build the path
+				-- Build smooth path through all collectibles
 				local path = buildCollectiblePath()
 				
-				-- Follow the path smoothly
+				-- Walk through the path smoothly
 				for i, collectible in ipairs(path) do
 					if not autofarmEnabled then break end
 					
@@ -317,19 +315,17 @@ local farmLoop = task.spawn(function()
 					
 					local targetPos = getCollectiblePosition(collectible)
 					if targetPos and humanoid and humanoid.Parent and hrp and hrp.Parent then
-						-- Check if we're still within range of player's original position
+						-- Check if still within range
 						if (targetPos - hrp.Position).Magnitude > COLLECTIBLE_RANGE then
-							-- Rebuild path from current position
 							break
 						end
 						
+						-- Move to collectible
 						humanoid:MoveTo(targetPos)
 						
-						-- Quick check if still moving towards target
-						local checkDuration = 0.1
+						-- Brief wait to allow smooth movement to next target
 						local startTime = tick()
-						
-						while tick() - startTime < checkDuration and autofarmEnabled do
+						while tick() - startTime < 0.15 and autofarmEnabled do
 							if not collectibleExists(collectible) then
 								break
 							end
@@ -367,6 +363,7 @@ local farmLoop = task.spawn(function()
 				Workspace.Gravity = DEFAULT_GRAVITY
 			end
 		end
+		task.wait(0.1)
 	end
 end)
 
@@ -397,3 +394,4 @@ gui.Destroying:Connect(function()
 	if farmLoop then
 		task.cancel(farmLoop)
 	end
+end)
