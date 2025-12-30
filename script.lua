@@ -5,18 +5,12 @@ local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
-
-local DEFAULT_WALKSPEED = 16
-local FARM_WALKSPEED = 100
 
 local function onCharacterAdded(char)
 	character = char
-	humanoid = char:WaitForChild("Humanoid")
 	hrp = char:WaitForChild("HumanoidRootPart")
-	humanoid.WalkSpeed = DEFAULT_WALKSPEED
-	hrp.Anchored = false
+	hrp.Anchored = false -- safety reset
 end
 
 player.CharacterAdded:Connect(onCharacterAdded)
@@ -28,7 +22,7 @@ local monstersFolder = workspace:WaitForChild("Monsters")
 local collectiblesFolder = workspace:WaitForChild("Collectibles")
 
 ------------------------------------------------
--- STATE
+-- CONSTANTS & STATE
 ------------------------------------------------
 local autofarmEnabled = false
 local collectiblesEnabled = true
@@ -94,21 +88,30 @@ closeButton.Parent = frame
 ------------------------------------------------
 heightBox.FocusLost:Connect(function()
 	local num = tonumber(heightBox.Text:match("[%d%.]+"))
-	if num then teleportHeight = math.clamp(num, 0, 50) end
+	if num then
+		teleportHeight = math.clamp(num, 0, 50)
+	end
 	heightBox.Text = "Height: " .. teleportHeight
 end)
 
 toggleButton.MouseButton1Click:Connect(function()
 	autofarmEnabled = not autofarmEnabled
 
-	if not autofarmEnabled then
-		hrp.Anchored = false
-		humanoid.WalkSpeed = DEFAULT_WALKSPEED
-	end
+	if autofarmEnabled then
+		toggleButton.Text = "Autofarm: ON"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(0,170,0)
 
-	toggleButton.Text = autofarmEnabled and "Autofarm: ON" or "Autofarm: OFF"
-	toggleButton.BackgroundColor3 =
-		autofarmEnabled and Color3.fromRGB(0,170,0) or Color3.fromRGB(170,0,0)
+		if hrp then
+			hrp.Anchored = true -- ✅ FORCE ANCHOR
+		end
+	else
+		toggleButton.Text = "Autofarm: OFF"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(170,0,0)
+
+		if hrp then
+			hrp.Anchored = false -- ✅ RELEASE
+		end
+	end
 end)
 
 collectibleButton.MouseButton1Click:Connect(function()
@@ -123,11 +126,12 @@ closeButton.MouseButton1Click:Connect(function()
 end)
 
 ------------------------------------------------
--- MONSTERS
+-- MONSTER HANDLING
 ------------------------------------------------
 local function isValidMonster(monster)
-	local hum = monster:FindFirstChildOfClass("Humanoid")
-	return hum and hum.Health > 0
+	if not monster or not monster.Parent then return false end
+	local humanoid = monster:FindFirstChildOfClass("Humanoid")
+	return humanoid and humanoid.Health > 0
 end
 
 local function getRoot(model)
@@ -143,6 +147,10 @@ local function refreshMonsters()
 	end
 end
 
+monstersFolder.ChildAdded:Connect(refreshMonsters)
+monstersFolder.ChildRemoved:Connect(refreshMonsters)
+refreshMonsters()
+
 ------------------------------------------------
 -- COLLECTIBLES
 ------------------------------------------------
@@ -156,51 +164,47 @@ local function getCollectiblePosition(obj)
 end
 
 local function getNearbyCollectibles()
-	local list = {}
-	for _, c in ipairs(collectiblesFolder:GetChildren()) do
-		local pos = getCollectiblePosition(c)
+	if not collectiblesEnabled or not hrp then return {} end
+
+	local nearby = {}
+	for _, collectible in ipairs(collectiblesFolder:GetChildren()) do
+		local pos = getCollectiblePosition(collectible)
 		if pos and (pos - hrp.Position).Magnitude <= COLLECTIBLE_RANGE then
-			table.insert(list, c)
+			table.insert(nearby, collectible)
 		end
 	end
-	return list
+	return nearby
+end
+
+local function teleportToCollectible(obj)
+	if not collectiblesEnabled then return end
+	local pos = getCollectiblePosition(obj)
+	if pos then
+		hrp.CFrame = CFrame.new(pos + Vector3.new(0, COLLECTIBLE_HEIGHT, 0))
+	end
 end
 
 ------------------------------------------------
--- AUTOFARM LOOP
+-- AUTOFARM LOOP (ANCHOR ENFORCED)
 ------------------------------------------------
 task.spawn(function()
 	while true do
-		if autofarmEnabled then
+		if autofarmEnabled and hrp then
+			hrp.Anchored = true -- ✅ KEEP ANCHORED AT ALL TIMES
+
 			refreshMonsters()
+			local enemyCount = #monsterList
 
-			------------------------------------------------
-			-- NO ENEMIES → WALK TO COLLECTIBLES
-			------------------------------------------------
-			if #monsterList == 0 and collectiblesEnabled then
-				hrp.Anchored = false
-				humanoid.WalkSpeed = FARM_WALKSPEED
-
-				for _, collectible in ipairs(getNearbyCollectibles()) do
-					if not autofarmEnabled then break end
-					refreshMonsters()
-					if #monsterList > 0 then break end
-
-					local pos = getCollectiblePosition(collectible)
-					if pos then
-						humanoid:MoveTo(pos)
-						humanoid.MoveToFinished:Wait(2)
+			if enemyCount == 0 then
+				if collectiblesEnabled then
+					for _, collectible in ipairs(getNearbyCollectibles()) do
+						if not autofarmEnabled then break end
+						teleportToCollectible(collectible)
+						task.wait(0.1)
 					end
 				end
-
-			------------------------------------------------
-			-- ENEMIES EXIST → TELEPORT FARM
-			------------------------------------------------
 			else
-				humanoid.WalkSpeed = DEFAULT_WALKSPEED
-				hrp.Anchored = true
-
-				local delayTime = #monsterList < 8 and 0.2 or 0.05
+				local delayTime = enemyCount < 8 and 0.2 or 0.05
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
@@ -211,6 +215,14 @@ task.spawn(function()
 							hrp.CFrame = CFrame.lookAt(pos, root.Position)
 							enemyCounter += 1
 							task.wait(delayTime)
+
+							if collectiblesEnabled and enemyCounter % 3 == 0 then
+								local nearby = getNearbyCollectibles()
+								if #nearby > 0 then
+									teleportToCollectible(nearby[math.random(#nearby)])
+									task.wait(0.1)
+								end
+							end
 						end
 					end
 				end
