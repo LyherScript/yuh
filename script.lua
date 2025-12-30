@@ -204,7 +204,7 @@ task.spawn(function()
 					end
 				end
 			else
-				local delayTime = enemyCount < 8 and 0.2 or 0.05
+				local delayTime = enemyCount < 8 and 0.45 or 0.05
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
