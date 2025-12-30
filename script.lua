@@ -170,6 +170,7 @@ local function refreshMonsters()
 		if m:IsA("Model") and isValidMonster(m) then
 			table.insert(monsterList, m)
 		end
+		task.wait(0.03)
 	end
 end
 
@@ -233,126 +234,108 @@ local farmLoop = task.spawn(function()
 				if #allCollectibles == 0 then
 					-- Wait for new collectible to be added
 					local newCollectible = collectiblesFolder.ChildAdded:Wait()
+					task.wait(0.03)
 				end
 
-				-- Find closest collectible to player as starting point (within range only)
-				local currentTarget = nil
-				local closestDist = math.huge
-				
-				for _, c in ipairs(collectiblesFolder:GetChildren()) do
-					if collectibleExists(c) and isCorrectColor(c) then
-						local pos = getCollectiblePosition(c)
-						if pos then
-							local dist = (pos - hrp.Position).Magnitude
-							if dist < closestDist and dist <= COLLECTIBLE_RANGE then
-								closestDist = dist
-								currentTarget = c
+				-- Build complete path of collectibles in order
+				local function buildCollectiblePath()
+					local path = {}
+					local visited = {}
+					
+					-- Find closest collectible to player as starting point (within range only)
+					local currentPos = hrp.Position
+					local currentTarget = nil
+					local closestDist = math.huge
+					
+					for _, c in ipairs(collectiblesFolder:GetChildren()) do
+						if collectibleExists(c) and isCorrectColor(c) then
+							local pos = getCollectiblePosition(c)
+							if pos then
+								local dist = (pos - currentPos).Magnitude
+								if dist < closestDist and dist <= COLLECTIBLE_RANGE then
+									closestDist = dist
+									currentTarget = c
+								end
 							end
 						end
+						task.wait(0.03)
 					end
-				end
-
-				-- Chain through collectibles, always picking the closest to current target
-				local visitedCollectibles = {}
-				
-				while currentTarget and autofarmEnabled do
-					-- Double-check monster list before moving
-					refreshMonsters()
-					if #monsterList > 0 then break end
-
-					-- Verify target still exists
-					if not collectibleExists(currentTarget) then
-						-- Find a new target that hasn't been visited (within range of player)
-						currentTarget = nil
+					
+					if not currentTarget then return path end
+					
+					-- Build path by chaining closest collectibles
+					while currentTarget do
+						table.insert(path, currentTarget)
+						visited[currentTarget] = true
+						
+						local targetPos = getCollectiblePosition(currentTarget)
+						if not targetPos then break end
+						
+						-- Find next closest collectible to current target
+						local nextTarget = nil
 						closestDist = math.huge
 						
 						for _, c in ipairs(collectiblesFolder:GetChildren()) do
-							if collectibleExists(c) and isCorrectColor(c) and not visitedCollectibles[c] then
+							if collectibleExists(c) and isCorrectColor(c) and not visited[c] then
 								local pos = getCollectiblePosition(c)
 								if pos then
-									local dist = (pos - hrp.Position).Magnitude
-									if dist < closestDist and dist <= COLLECTIBLE_RANGE then
+									local dist = (pos - targetPos).Magnitude
+									if dist < closestDist then
 										closestDist = dist
-										currentTarget = c
+										nextTarget = c
 									end
 								end
 							end
+							task.wait(0.03)
 						end
 						
-						if not currentTarget then break end
+						currentTarget = nextTarget
 					end
-
-					local targetPos = getCollectiblePosition(currentTarget)
-					if targetPos and humanoid and humanoid.Parent then
+					
+					return path
+				end
+				
+				-- Build the path
+				local path = buildCollectiblePath()
+				
+				-- Follow the path smoothly
+				for i, collectible in ipairs(path) do
+					if not autofarmEnabled then break end
+					
+					-- Check for enemies before each move
+					refreshMonsters()
+					if #monsterList > 0 then break end
+					
+					-- Verify collectible still exists
+					if not collectibleExists(collectible) then
+						task.wait(0.03)
+						continue
+					end
+					
+					local targetPos = getCollectiblePosition(collectible)
+					if targetPos and humanoid and humanoid.Parent and hrp and hrp.Parent then
+						-- Check if we're still within range of player's original position
+						if (targetPos - hrp.Position).Magnitude > COLLECTIBLE_RANGE then
+							-- Rebuild path from current position
+							path = buildCollectiblePath()
+							break
+						end
+						
 						humanoid:MoveTo(targetPos)
 						
-						-- Wait for move to finish with timeout
-						local moveConnection
-						local finished = false
-						
-						moveConnection = humanoid.MoveToFinished:Connect(function()
-							finished = true
-						end)
-						
-						-- Wait up to 2 seconds for move to complete
+						-- Quick check if still moving towards target
+						local checkDuration = 0.1
 						local startTime = tick()
-						while not finished and tick() - startTime < 2 do
-							-- Check if collectible was collected/removed during movement
-							if not collectibleExists(currentTarget) then
+						
+						while tick() - startTime < checkDuration and autofarmEnabled do
+							if not collectibleExists(collectible) then
 								break
 							end
-						end
-						
-						if moveConnection then
-							moveConnection:Disconnect()
+							task.wait(0.03)
 						end
 					end
-
-					-- Mark as visited
-					visitedCollectibles[currentTarget] = true
-
-					-- Find next closest collectible to CURRENT TARGET (not player)
-					local nextTarget = nil
-					closestDist = math.huge
 					
-					for _, c in ipairs(collectiblesFolder:GetChildren()) do
-						if collectibleExists(c) and isCorrectColor(c) and not visitedCollectibles[c] then
-							local pos = getCollectiblePosition(c)
-							if pos and targetPos then
-								local dist = (pos - targetPos).Magnitude
-								if dist < closestDist then
-									closestDist = dist
-									nextTarget = c
-								end
-							end
-						end
-					end
-
-					currentTarget = nextTarget
-					
-					-- If next target exists but is too far from player, reset visited and find new starting point
-					if currentTarget then
-						local nextPos = getCollectiblePosition(currentTarget)
-						if nextPos and (nextPos - hrp.Position).Magnitude > COLLECTIBLE_RANGE then
-							-- Clear visited and find new starting point within range
-							visitedCollectibles = {}
-							currentTarget = nil
-							closestDist = math.huge
-							
-							for _, c in ipairs(collectiblesFolder:GetChildren()) do
-								if collectibleExists(c) and isCorrectColor(c) then
-									local pos = getCollectiblePosition(c)
-									if pos then
-										local dist = (pos - hrp.Position).Magnitude
-										if dist < closestDist and dist <= COLLECTIBLE_RANGE then
-											closestDist = dist
-											currentTarget = c
-										end
-									end
-								end
-							end
-						end
-					end
+					task.wait(0.03)
 				end
 
 			-- ENEMIES EXIST → TELEPORT FARM
