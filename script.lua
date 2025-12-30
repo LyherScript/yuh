@@ -216,7 +216,7 @@ task.spawn(function()
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
 				hrp.Anchored = true
 
-				local delayTime = #monsterList < 8 and 0.25 or 0.1
+				local delayTime = #monsterList < 8 and 0.3 or 0.25
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
