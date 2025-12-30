@@ -57,7 +57,7 @@ local collectiblesEnabled = true
 local monsterList = {}
 local teleportHeight = 4
 
-local COLLECTIBLE_RANGE = 400
+local COLLECTIBLE_RANGE = 300
 local COLLECTIBLE_HEIGHT = 0.5
 
 ------------------------------------------------
@@ -139,6 +139,11 @@ collectibleButton.MouseButton1Click:Connect(function()
 end)
 
 closeButton.MouseButton1Click:Connect(function()
+	-- Turn off autofarm before closing
+	autofarmEnabled = false
+	humanoid.WalkSpeed = DEFAULT_WALKSPEED
+	Workspace.Gravity = DEFAULT_GRAVITY
+	
 	gui.Enabled = false
 end)
 
@@ -324,6 +329,8 @@ local farmLoop = task.spawn(function()
 						if root and root.Parent then
 							local pos = root.Position + Vector3.new(0, teleportHeight, 0)
 							hrp.CFrame = CFrame.lookAt(pos, root.Position)
+							hrp.AssemblyLinearVelocity = Vector3.zero
+							hrp.AssemblyAngularVelocity = Vector3.zero
 							task.wait(delayTime)
 						end
 					end
@@ -339,7 +346,9 @@ end)
 
 -- Cleanup on script removal
 script.Destroying:Connect(function()
-	-- Reset gravity on cleanup
+	-- Turn off autofarm and reset states
+	autofarmEnabled = false
+	humanoid.WalkSpeed = DEFAULT_WALKSPEED
 	Workspace.Gravity = DEFAULT_GRAVITY
 	
 	if farmLoop then
@@ -347,5 +356,19 @@ script.Destroying:Connect(function()
 	end
 	if gui then
 		gui:Destroy()
+	end
+end)
+
+-- Cleanup when GUI is destroyed
+gui.Destroying:Connect(function()
+	-- Turn off autofarm and reset states
+	autofarmEnabled = false
+	if humanoid and humanoid.Parent then
+		humanoid.WalkSpeed = DEFAULT_WALKSPEED
+	end
+	Workspace.Gravity = DEFAULT_GRAVITY
+	
+	if farmLoop then
+		task.cancel(farmLoop)
 	end
 end)
