@@ -2,6 +2,7 @@
 -- SERVICES & PLAYER
 ------------------------------------------------
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -9,7 +10,8 @@ local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
 local DEFAULT_WALKSPEED = 16
-local FARM_WALKSPEED = 200
+local FARM_WALKSPEED = 100
+local DEFAULT_GRAVITY = Workspace.Gravity
 
 local function onCharacterAdded(char)
 	character = char
@@ -54,7 +56,6 @@ local collectiblesEnabled = true
 
 local monsterList = {}
 local teleportHeight = 4
-local enemyCounter = 0
 
 local COLLECTIBLE_RANGE = 400
 local COLLECTIBLE_HEIGHT = 0.5
@@ -122,6 +123,7 @@ toggleButton.MouseButton1Click:Connect(function()
 
 	if not autofarmEnabled then
 		humanoid.WalkSpeed = DEFAULT_WALKSPEED
+		Workspace.Gravity = DEFAULT_GRAVITY
 	end
 
 	toggleButton.Text = autofarmEnabled and "Autofarm: ON" or "Autofarm: OFF"
@@ -183,42 +185,6 @@ local function getCollectiblePosition(obj)
 	end
 end
 
-local function getNearbyCollectibles()
-	local list = {}
-	if not collectiblesFolder or not hrp or not hrp.Parent then return list end
-	
-	for _, c in ipairs(collectiblesFolder:GetChildren()) do
-		if collectibleExists(c) then
-			local pos = getCollectiblePosition(c)
-			if pos and (pos - hrp.Position).Magnitude <= COLLECTIBLE_RANGE then
-				table.insert(list, c)
-			end
-		end
-	end
-
-	-- Sort by distance to HRP (closest first)
-	table.sort(list, function(a, b)
-		local pa = getCollectiblePosition(a)
-		local pb = getCollectiblePosition(b)
-		if pa and pb then
-			return (pa - hrp.Position).Magnitude < (pb - hrp.Position).Magnitude
-		end
-		return false
-	end)
-
-	return list
-end
-
-local function teleportToCollectible(obj)
-	if not collectiblesEnabled or not collectibleExists(obj) then return false end
-	local pos = getCollectiblePosition(obj)
-	if pos and hrp and hrp.Parent then
-		hrp.CFrame = CFrame.new(pos + Vector3.new(0, COLLECTIBLE_HEIGHT, 0))
-		return true
-	end
-	return false
-end
-
 ------------------------------------------------
 -- AUTOFARM LOOP
 ------------------------------------------------
@@ -242,7 +208,7 @@ local farmLoop = task.spawn(function()
 				if #allCollectibles == 0 then
 					-- Wait for new collectible to be added
 					local newCollectible = collectiblesFolder.ChildAdded:Wait()
-					task.wait(0.03) -- Brief delay to let it fully load
+					task.wait(0.1)
 				end
 
 				-- Find closest collectible to player as starting point
@@ -345,8 +311,11 @@ local farmLoop = task.spawn(function()
 			-- ENEMIES EXIST → TELEPORT FARM
 			else
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
+				
+				-- Set gravity to 0 while farming enemies
+				Workspace.Gravity = 0
 
-				local delayTime = #monsterList < 8 and 0.2 or 0.025
+				local delayTime = #monsterList < 8 and 0.2 or 0.05
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
@@ -355,33 +324,24 @@ local farmLoop = task.spawn(function()
 						if root and root.Parent then
 							local pos = root.Position + Vector3.new(0, teleportHeight, 0)
 							hrp.CFrame = CFrame.lookAt(pos, root.Position)
-							enemyCounter += 1
 							task.wait(delayTime)
-
-							-- Collectibles every 3 enemies
-							if collectiblesEnabled and enemyCounter % 3 == 0 then
-								local nearby = getNearbyCollectibles()
-								-- Get closest collectible that still exists
-								for _, nearbyCollectible in ipairs(nearby) do
-									if collectibleExists(nearbyCollectible) then
-										if teleportToCollectible(nearbyCollectible) then
-											task.wait(0.1)
-											break -- Only teleport to one collectible
-										end
-									end
-								end
-							end
 						end
 					end
 				end
+				
+				-- Reset gravity after farming enemies
+				Workspace.Gravity = DEFAULT_GRAVITY
 			end
 		end
 		task.wait(0.1)
 	end
 end)
 
--- Cleanup on script removal (optional but good practice)
+-- Cleanup on script removal
 script.Destroying:Connect(function()
+	-- Reset gravity on cleanup
+	Workspace.Gravity = DEFAULT_GRAVITY
+	
 	if farmLoop then
 		task.cancel(farmLoop)
 	end
