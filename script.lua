@@ -22,7 +22,6 @@ local function onCharacterAdded(char)
 	else
 		humanoid.WalkSpeed = DEFAULT_WALKSPEED
 	end
-	hrp.Anchored = false
 end
 
 player.CharacterAdded:Connect(onCharacterAdded)
@@ -122,7 +121,6 @@ toggleButton.MouseButton1Click:Connect(function()
 	autofarmEnabled = not autofarmEnabled
 
 	if not autofarmEnabled then
-		hrp.Anchored = false
 		humanoid.WalkSpeed = DEFAULT_WALKSPEED
 	end
 
@@ -237,7 +235,6 @@ local farmLoop = task.spawn(function()
 
 			-- NO ENEMIES → WALK TO COLLECTIBLES (closest first)
 			if #monsterList == 0 and collectiblesEnabled then
-				hrp.Anchored = false
 				humanoid.WalkSpeed = FARM_WALKSPEED
 
 				local collectibles = getNearbyCollectibles()
@@ -282,7 +279,6 @@ local farmLoop = task.spawn(function()
 			-- ENEMIES EXIST → TELEPORT FARM
 			else
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
-				hrp.Anchored = true
 
 				local delayTime = #monsterList < 8 and 0.2 or 0.05
 
