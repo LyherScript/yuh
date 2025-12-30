@@ -3,7 +3,6 @@
 ------------------------------------------------
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -13,10 +12,6 @@ local hrp = character:WaitForChild("HumanoidRootPart")
 local DEFAULT_WALKSPEED = 16
 local FARM_WALKSPEED = 135
 local DEFAULT_GRAVITY = Workspace.Gravity
-local TWEEN_SPEED = 45
-local MAX_TARGETS = 7
-
-local spawnLocation = Workspace:WaitForChild("ClassicMinigame"):WaitForChild("ClassicSpawnLocation")
 
 local function onCharacterAdded(char)
 	character = char
@@ -60,7 +55,7 @@ local autofarmEnabled = false
 local collectiblesEnabled = true
 
 local monsterList = {}
-local teleportHeight = 4
+local teleportHeight = 15
 
 local COLLECTIBLE_RANGE = 1200
 local COLLECTIBLE_HEIGHT = 0.5
@@ -169,25 +164,12 @@ end
 
 local function refreshMonsters()
 	monsterList = {}
-	if not monstersFolder or not spawnLocation then return end
+	if not monstersFolder then return end
 	
-	local tempList = {}
 	for _, m in ipairs(monstersFolder:GetChildren()) do
 		if m:IsA("Model") and isValidMonster(m) then
-			local root = getRoot(m)
-			if root then
-				local distance = (root.Position - spawnLocation.Position).Magnitude
-				table.insert(tempList, {monster = m, distance = distance})
-			end
+			table.insert(monsterList, m)
 		end
-	end
-	
-	-- Sort by distance to spawn location
-	table.sort(tempList, function(a, b) return a.distance < b.distance end)
-	
-	-- Take only the closest 7
-	for i = 1, math.min(MAX_TARGETS, #tempList) do
-		table.insert(monsterList, tempList[i].monster)
 	end
 end
 
@@ -374,42 +356,25 @@ local farmLoop = task.spawn(function()
 					end
 				end
 
-			-- ENEMIES EXIST → TWEEN FARM
+			-- ENEMIES EXIST → TELEPORT FARM
 			else
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
 				
 				-- Set gravity to 0 while farming enemies
 				Workspace.Gravity = 0
 
+				local delayTime = #monsterList < 8 and 0.4 or 0.25
+
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
 					if isValidMonster(monster) then
 						local root = getRoot(monster)
 						if root and root.Parent then
-							local targetPos = root.Position + Vector3.new(0, teleportHeight, 0)
-							local distance = (hrp.Position - targetPos).Magnitude
-							local tweenTime = distance / TWEEN_SPEED
-							
-							-- Anchor the HumanoidRootPart to allow tweening
-							hrp.Anchored = true
-							
-							local tweenInfo = TweenInfo.new(
-								tweenTime,
-								Enum.EasingStyle.Linear,
-								Enum.EasingDirection.InOut
-							)
-							
-							local goal = {CFrame = CFrame.lookAt(targetPos, root.Position)}
-							local tween = TweenService:Create(hrp, tweenInfo, goal)
-							
+							local pos = root.Position + Vector3.new(0, teleportHeight, 0)
+							hrp.CFrame = CFrame.lookAt(pos, root.Position)
 							hrp.AssemblyLinearVelocity = Vector3.zero
 							hrp.AssemblyAngularVelocity = Vector3.zero
-							
-							tween:Play()
-							tween.Completed:Wait()
-							
-							-- Unanchor after tween completes
-							hrp.Anchored = false
+							task.wait(delayTime)
 						end
 					end
 				end
@@ -428,7 +393,6 @@ script.Destroying:Connect(function()
 	autofarmEnabled = false
 	humanoid.WalkSpeed = DEFAULT_WALKSPEED
 	Workspace.Gravity = DEFAULT_GRAVITY
-	hrp.Anchored = false
 	
 	if farmLoop then
 		task.cancel(farmLoop)
@@ -444,9 +408,6 @@ gui.Destroying:Connect(function()
 	autofarmEnabled = false
 	if humanoid and humanoid.Parent then
 		humanoid.WalkSpeed = DEFAULT_WALKSPEED
-	end
-	if hrp and hrp.Parent then
-		hrp.Anchored = false
 	end
 	Workspace.Gravity = DEFAULT_GRAVITY
 	
