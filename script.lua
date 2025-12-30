@@ -242,7 +242,7 @@ local farmLoop = task.spawn(function()
 				if #allCollectibles == 0 then
 					-- Wait for new collectible to be added
 					local newCollectible = collectiblesFolder.ChildAdded:Wait()
-					task.wait(0.1) -- Brief delay to let it fully load
+					task.wait(0.03) -- Brief delay to let it fully load
 				end
 
 				-- Find closest collectible to player as starting point
