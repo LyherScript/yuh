@@ -346,7 +346,7 @@ local farmLoop = task.spawn(function()
 			else
 				humanoid.WalkSpeed = DEFAULT_WALKSPEED
 
-				local delayTime = #monsterList < 8 and 0.2 or 0.125
+				local delayTime = #monsterList < 8 and 0.2 or 0.025
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
