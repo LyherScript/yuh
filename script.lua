@@ -10,7 +10,7 @@ local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
 local DEFAULT_WALKSPEED = 16
-local FARM_WALKSPEED = 100
+local FARM_WALKSPEED = 200
 local DEFAULT_GRAVITY = Workspace.Gravity
 
 local function onCharacterAdded(char)
@@ -57,8 +57,9 @@ local collectiblesEnabled = true
 local monsterList = {}
 local teleportHeight = 4
 
-local COLLECTIBLE_RANGE = 150
+local COLLECTIBLE_RANGE = 200
 local COLLECTIBLE_HEIGHT = 0.5
+local TARGET_COLOR = Color3.fromRGB(110, 244, 240)
 
 ------------------------------------------------
 -- GUI
@@ -179,8 +180,27 @@ local function collectibleExists(obj)
 	return obj and obj.Parent and (obj.Parent == collectiblesFolder or obj.Parent.Parent == collectiblesFolder)
 end
 
+local function isCorrectColor(obj)
+	if not obj then return false end
+	
+	-- Check if it's a BasePart with the target color
+	if obj:IsA("BasePart") then
+		return obj.Color == TARGET_COLOR
+	end
+	
+	-- If it's a Model, check its primary part or first BasePart child
+	if obj:IsA("Model") then
+		local part = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+		if part then
+			return part.Color == TARGET_COLOR
+		end
+	end
+	
+	return false
+end
+
 local function getCollectiblePosition(obj)
-	if not collectibleExists(obj) then return nil end
+	if not collectibleExists(obj) or not isCorrectColor(obj) then return nil end
 	
 	if obj:IsA("BasePart") then
 		return obj.Position
@@ -215,16 +235,16 @@ local farmLoop = task.spawn(function()
 					local newCollectible = collectiblesFolder.ChildAdded:Wait()
 				end
 
-				-- Find closest collectible to player as starting point
+				-- Find closest collectible to player as starting point (within range only)
 				local currentTarget = nil
 				local closestDist = math.huge
 				
 				for _, c in ipairs(collectiblesFolder:GetChildren()) do
-					if collectibleExists(c) then
+					if collectibleExists(c) and isCorrectColor(c) then
 						local pos = getCollectiblePosition(c)
 						if pos then
 							local dist = (pos - hrp.Position).Magnitude
-							if dist < closestDist then
+							if dist < closestDist and dist <= COLLECTIBLE_RANGE then
 								closestDist = dist
 								currentTarget = c
 							end
@@ -242,16 +262,16 @@ local farmLoop = task.spawn(function()
 
 					-- Verify target still exists
 					if not collectibleExists(currentTarget) then
-						-- Find a new target that hasn't been visited
+						-- Find a new target that hasn't been visited (within range of player)
 						currentTarget = nil
 						closestDist = math.huge
 						
 						for _, c in ipairs(collectiblesFolder:GetChildren()) do
-							if collectibleExists(c) and not visitedCollectibles[c] then
+							if collectibleExists(c) and isCorrectColor(c) and not visitedCollectibles[c] then
 								local pos = getCollectiblePosition(c)
 								if pos then
 									local dist = (pos - hrp.Position).Magnitude
-									if dist < closestDist then
+									if dist < closestDist and dist <= COLLECTIBLE_RANGE then
 										closestDist = dist
 										currentTarget = c
 									end
@@ -277,7 +297,6 @@ local farmLoop = task.spawn(function()
 						-- Wait up to 2 seconds for move to complete
 						local startTime = tick()
 						while not finished and tick() - startTime < 2 do
-							task.wait(0.04)
 							-- Check if collectible was collected/removed during movement
 							if not collectibleExists(currentTarget) then
 								break
@@ -297,7 +316,7 @@ local farmLoop = task.spawn(function()
 					closestDist = math.huge
 					
 					for _, c in ipairs(collectiblesFolder:GetChildren()) do
-						if collectibleExists(c) and not visitedCollectibles[c] then
+						if collectibleExists(c) and isCorrectColor(c) and not visitedCollectibles[c] then
 							local pos = getCollectiblePosition(c)
 							if pos and targetPos then
 								local dist = (pos - targetPos).Magnitude
@@ -310,6 +329,30 @@ local farmLoop = task.spawn(function()
 					end
 
 					currentTarget = nextTarget
+					
+					-- If next target exists but is too far from player, reset visited and find new starting point
+					if currentTarget then
+						local nextPos = getCollectiblePosition(currentTarget)
+						if nextPos and (nextPos - hrp.Position).Magnitude > COLLECTIBLE_RANGE then
+							-- Clear visited and find new starting point within range
+							visitedCollectibles = {}
+							currentTarget = nil
+							closestDist = math.huge
+							
+							for _, c in ipairs(collectiblesFolder:GetChildren()) do
+								if collectibleExists(c) and isCorrectColor(c) then
+									local pos = getCollectiblePosition(c)
+									if pos then
+										local dist = (pos - hrp.Position).Magnitude
+										if dist < closestDist and dist <= COLLECTIBLE_RANGE then
+											closestDist = dist
+											currentTarget = c
+										end
+									end
+								end
+							end
+						end
+					end
 				end
 
 			-- ENEMIES EXIST → TELEPORT FARM
@@ -319,7 +362,7 @@ local farmLoop = task.spawn(function()
 				-- Set gravity to 0 while farming enemies
 				Workspace.Gravity = 0
 
-				local delayTime = #monsterList < 8 and 0.1 or 0.05
+				local delayTime = #monsterList < 8 and 0.2 or 0.045
 
 				for _, monster in ipairs(monsterList) do
 					if not autofarmEnabled then break end
